@@ -7,6 +7,8 @@ Rust Discord Bot
 │   ├── play (Currently supports Youtube playlists by url, Youtube Videos by url and Youtube Videos by search query)
 │   ├── join
 │   ├── queue [Aliases: q, list, playlist]
+│   ├── stop
+│   ├── skip
 │   └── playing [Aliases: np, song]
 ├── General
 │   ├── userinfo
