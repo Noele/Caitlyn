@@ -57,7 +57,7 @@ struct General;
 
 #[group]
 #[only_in(guilds)]
-#[commands(join, play, playing, queue)]
+#[commands(join, play, playing, queue, stop, skip)]
 struct Music;
 
 #[allow(dead_code)]

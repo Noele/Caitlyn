@@ -42,7 +42,9 @@ impl VoiceEventHandler for TrackEndNotifier {
             };
             {
                 let mut queue = queue_lock.write().await;
-                queue.remove(0);
+                if !queue.is_empty() {
+                    queue.remove(0);
+                }
             }
         }
 
@@ -166,12 +168,8 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     Ok(())
 }
 
-async fn play_youtube_video_url(
-    ctx: &Context,
-    msg: &Message,
-    query: String,
-    is_url: bool,
-) -> CommandResult {
+
+async fn play_youtube_video_url(ctx: &Context, msg: &Message, query: String, is_url: bool, ) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
     let manager = songbird::get(ctx)
@@ -286,14 +284,26 @@ async fn play_youtube_playlist(ctx: &Context, msg: &Message, url: String) -> Com
 async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let query = String::from(args.message());
 
-    if query.contains("youtube") || query.contains("youtu.be") {
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+
+    if manager.get(msg.guild_id.unwrap()).is_none() {
+        let result = _join(&ctx, &msg, false).await;
+        if !result {
+            return Ok(())
+        }
+    }
+
+    return if query.contains("youtube") || query.contains("youtu.be") {
         if !query.contains("playlist?list") {
-            return play_youtube_video_url(&ctx, &msg, query, true).await;
+            play_youtube_video_url(&ctx, &msg, query, true).await
         } else {
-            return play_youtube_playlist(&ctx, &msg, query).await;
+            play_youtube_playlist(&ctx, &msg, query).await
         }
     } else {
-        return play_youtube_video_url(&ctx, &msg, query, false).await;
+        play_youtube_video_url(&ctx, &msg, query, false).await
     }
 }
 fn match_else_none(input: &Option<String>) -> String {
@@ -301,6 +311,41 @@ fn match_else_none(input: &Option<String>) -> String {
         Some(n) => n.to_owned(),
         None => String::from("None"),
     }
+}
+
+#[command]
+#[only_in(guilds)]
+async fn skip(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
+    let guild = msg.guild(&ctx.cache).unwrap();
+    let guild_id = guild.id;
+
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+
+    if let Some(handler_lock) = manager.get(guild_id) {
+        let handler = handler_lock.lock().await;
+        let queue = handler.queue();
+        let _ = queue.skip();
+
+        check_msg(
+            msg.channel_id
+                .say(
+                    &ctx.http,
+                    format!("Song skipped: {} in queue.", queue.len()),
+                )
+                .await,
+        );
+    } else {
+        check_msg(
+            msg.channel_id
+                .say(&ctx.http, "Not in a voice channel to play in")
+                .await,
+        );
+    }
+
+    Ok(())
 }
 
 #[command]
@@ -355,6 +400,11 @@ async fn playing(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[only_in(guilds)]
 async fn join(ctx: &Context, msg: &Message) -> CommandResult {
+    _join(&ctx, &msg, true).await;
+    Ok(())
+}
+
+async fn _join(ctx: &Context, msg: &Message, invoked_by_command: bool) -> bool {
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
 
@@ -368,7 +418,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
         None => {
             check_msg(msg.reply(ctx, "Not in a voice channel").await);
 
-            return Ok(());
+            return false;
         }
     };
 
@@ -380,11 +430,13 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
     let (handle_lock, success) = manager.join(guild_id, connect_to).await;
 
     if let Ok(_channel) = success {
-        check_msg(
-            msg.channel_id
-                .say(&ctx.http, &format!("Joined {}", connect_to.mention()))
-                .await,
-        );
+        if invoked_by_command {
+            check_msg(
+                msg.channel_id
+                    .say(&ctx.http, &format!("Joined {}", connect_to.mention()))
+                    .await,
+            );
+        }
 
         let chan_id = msg.channel_id;
 
@@ -411,13 +463,54 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
                 .say(&ctx.http, "Error joining the channel")
                 .await,
         );
+        return false;
     }
 
-    Ok(())
+    true
 }
-
 fn check_msg(result: SerenityResult<Message>) {
     if let Err(why) = result {
         println!("Error sending message: {:?}", why);
     }
 }
+
+
+#[command]
+#[only_in(guilds)]
+async fn stop(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
+    let guild = msg.guild(&ctx.cache).unwrap();
+    let guild_id = guild.id;
+
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+
+    if let Some(handler_lock) = manager.get(guild_id) {
+        let handler = handler_lock.lock().await;
+        let queue = handler.queue();
+        let _ = queue.stop();
+
+        let queue_lock = {
+            let data_read = ctx.data.read().await;
+            data_read
+                .get::<Queue>()
+                .expect("Expected Queue in TypeMap.")
+                .clone()
+        };
+        {
+            let mut queue = queue_lock.write().await;
+            queue.clear();
+        }
+        check_msg(msg.channel_id.say(&ctx.http, "Queue cleared.").await);
+    } else {
+        check_msg(
+            msg.channel_id
+                .say(&ctx.http, "Not in a voice channel to play in")
+                .await,
+        );
+    }
+
+    Ok(())
+}
+
