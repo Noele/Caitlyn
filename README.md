@@ -4,12 +4,13 @@ Rust Discord Bot
 # Commands
 ```
 ├── Music
-│   ├── Play (Currently supports Youtube playlists by url, Youtube Videos by url and Youtube Videos by search query)
-│   ├── Join
-│   ├── Queue [Aliases: q, list, playlist]
-│   └── Playing [Aliases: np, song]
+│   ├── play (Currently supports Youtube playlists by url, Youtube Videos by url and Youtube Videos by search query)
+│   ├── join
+│   ├── queue [Aliases: q, list, playlist]
+│   └── playing [Aliases: np, song]
 ├── General
-│   └── Ping
+│   ├── userinfo
+│   └── ping
 ```
 
 ## Note
