@@ -60,6 +60,7 @@ struct General;
 #[commands(join, play, playing, queue)]
 struct Music;
 
+#[allow(dead_code)]
 struct Track {
     url: String,
     requester: String,

@@ -1,31 +1,27 @@
+use futures::StreamExt;
+use itertools::enumerate;
 use serenity::{
     async_trait,
-    client::{Context},
-    framework::{
-        standard::{
-            macros::{command},
-            Args, CommandResult,
-        },
-    },
+    client::Context,
+    framework::standard::{macros::command, Args, CommandResult},
     http::Http,
     model::{channel::Message, prelude::ChannelId},
     Result as SerenityResult,
 };
-use futures::StreamExt;
-use itertools::{enumerate};
 
 use crate::{Queue, Track};
+use regex::Regex;
+use serenity::model::id::GuildId;
 use serenity::model::mention::Mentionable;
 use serenity::prelude::TypeMap;
 use songbird::{
-    input::{restartable::Restartable},
-    Event, EventContext, EventHandler as VoiceEventHandler, TrackEvent,
+    input::restartable::Restartable, Event, EventContext, EventHandler as VoiceEventHandler,
+    TrackEvent,
 };
-use tokio::sync::RwLock;
 use std::sync::Arc;
-use regex::Regex;
-use serenity::model::id::GuildId;
+use tokio::sync::RwLock;
 
+#[allow(dead_code)]
 struct TrackEndNotifier {
     chan_id: ChannelId,
     http: Arc<Http>,
@@ -36,7 +32,7 @@ struct TrackEndNotifier {
 #[async_trait]
 impl VoiceEventHandler for TrackEndNotifier {
     async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
-        if let EventContext::Track(track_list) = ctx {
+        if let EventContext::Track(_track_list) = ctx {
             let queue_lock = {
                 let data_read = self.data.read().await;
                 data_read
@@ -105,8 +101,12 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let playlist = queue_lock.read().await;
 
     if playlist.is_empty() {
-        check_msg(msg.channel_id.say(&ctx.http, "Nothing is currently playing.").await);
-        return Ok(())
+        check_msg(
+            msg.channel_id
+                .say(&ctx.http, "Nothing is currently playing.")
+                .await,
+        );
+        return Ok(());
     }
     let mut description = String::new();
     let mut pages: Vec<String> = Vec::new();
@@ -129,15 +129,18 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
             pages.push(description.clone());
             description = String::new();
         }
-
     }
 
     if pages.is_empty() || !description.is_empty() {
         pages.push(description);
     }
 
-    if page_number <= 0 {page_number = 1}
-    if page_number > pages.len() as i32 {page_number = pages.len() as i32}
+    if page_number <= 0 {
+        page_number = 1
+    }
+    if page_number > pages.len() as i32 {
+        page_number = pages.len() as i32
+    }
 
     let page = match pages.get((page_number - 1) as usize) {
         Some(p) => p,
@@ -154,7 +157,7 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                             .icon_url("https://i.imgur.com/vVvNHcj.png")
                     })
                     .description(page)
-                        .footer(|f| f.text(format!("Page: {}/{}", page_number, pages.len())))
+                    .footer(|f| f.text(format!("Page: {}/{}", page_number, pages.len())))
                 })
             })
             .await,
@@ -163,7 +166,12 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     Ok(())
 }
 
-async fn play_youtube_video_url(ctx: &Context, msg: &Message, query: String, is_url: bool) -> CommandResult  {
+async fn play_youtube_video_url(
+    ctx: &Context,
+    msg: &Message,
+    query: String,
+    is_url: bool,
+) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
     let manager = songbird::get(ctx)
@@ -173,7 +181,11 @@ async fn play_youtube_video_url(ctx: &Context, msg: &Message, query: String, is_
     if let Some(handler_lock) = manager.get(guild_id) {
         let mut handler = handler_lock.lock().await;
 
-        let source = match if is_url {Restartable::ytdl(query, true).await} else {Restartable::ytdl_search(query, true).await} {
+        let source = match if is_url {
+            Restartable::ytdl(query, true).await
+        } else {
+            Restartable::ytdl_search(query, true).await
+        } {
             Ok(source) => source,
             Err(why) => {
                 println!("Err starting source: {:?}", why);
@@ -226,12 +238,20 @@ async fn play_youtube_video_url(ctx: &Context, msg: &Message, query: String, is_
         );
     }
     Ok(())
-
 }
 
-async fn play_youtube_playlist(ctx: &Context, msg: &Message, url:String) -> CommandResult {
-    let regex = Regex::new(r"(?:(?:PL|LL|EC|UU|FL|RD|UL|TL|PU|OLAK5uy_)[0-9A-Za-z-_]{10,}|RDMM)").unwrap();
-    let playlist_id = regex.captures_iter(&url).next().unwrap().iter().next().unwrap().unwrap().as_str();
+async fn play_youtube_playlist(ctx: &Context, msg: &Message, url: String) -> CommandResult {
+    let regex =
+        Regex::new(r"(?:(?:PL|LL|EC|UU|FL|RD|UL|TL|PU|OLAK5uy_)[0-9A-Za-z-_]{10,}|RDMM)").unwrap();
+    let playlist_id = regex
+        .captures_iter(&url)
+        .next()
+        .unwrap()
+        .iter()
+        .next()
+        .unwrap()
+        .unwrap()
+        .as_str();
 
     let id = playlist_id.parse()?;
     let ytextract = ytextract::Client::new();
@@ -240,7 +260,7 @@ async fn play_youtube_playlist(ctx: &Context, msg: &Message, url:String) -> Comm
 
     let videos = playlist.videos();
     futures::pin_mut!(videos);
-    let mut to_be_enqueued:Vec<String> = Vec::new();
+    let mut to_be_enqueued: Vec<String> = Vec::new();
 
     while let Some(item) = videos.next().await {
         match item {
@@ -250,18 +270,21 @@ async fn play_youtube_playlist(ctx: &Context, msg: &Message, url:String) -> Comm
     }
 
     for uri in to_be_enqueued {
-        play_youtube_video_url(&ctx, &msg, uri, true).await;
+        play_youtube_video_url(&ctx, &msg, uri, true).await?;
     }
 
-    check_msg(msg.channel_id.say(&ctx.http, "Added playlist to queue.").await);
+    check_msg(
+        msg.channel_id
+            .say(&ctx.http, "Added playlist to queue.")
+            .await,
+    );
     Ok(())
 }
 
 #[command]
 #[only_in(guilds)]
-async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let query = String::from(args.message());
-
 
     if query.contains("youtube") || query.contains("youtu.be") {
         if !query.contains("playlist?list") {
@@ -311,16 +334,20 @@ async fn playing(ctx: &Context, msg: &Message) -> CommandResult {
                                 .url(&current_track.url)
                                 .icon_url("https://i.imgur.com/vVvNHcj.png")
                         })
-                            .field("Requested By:", &current_track.requester, true)
-                            .thumbnail(&current_track.thumbnail)
-                            .field("Uploaded By:", &current_track.channel, true)
-                            .field("Upload Date:", &date, true)
+                        .field("Requested By:", &current_track.requester, true)
+                        .thumbnail(&current_track.thumbnail)
+                        .field("Uploaded By:", &current_track.channel, true)
+                        .field("Upload Date:", &date, true)
                     })
                 })
                 .await,
         );
     } else {
-        check_msg(msg.channel_id.say(&ctx.http, "Nothing is currently playing.").await);
+        check_msg(
+            msg.channel_id
+                .say(&ctx.http, "Nothing is currently playing.")
+                .await,
+        );
     }
     Ok(())
 }
@@ -375,7 +402,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
                 chan_id,
                 http: send_http,
                 data: send_data,
-                guild_id: send_guild
+                guild_id: send_guild,
             },
         );
     } else {

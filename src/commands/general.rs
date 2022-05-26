@@ -1,9 +1,9 @@
+use itertools::enumerate;
 use serenity::framework::standard::macros::command;
 use serenity::framework::standard::CommandResult;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 use std::cmp::Ordering;
-use itertools::enumerate;
 
 #[command]
 async fn ping(context: &Context, msg: &Message) -> CommandResult {
@@ -101,7 +101,11 @@ async fn userinfo(ctx: &Context, msg: &Message) -> CommandResult {
                                     .field("Member No.", &member_position.to_string(), true)
                                     .field(
                                         "Account Created",
-                                        &member.user.created_at().format("%A, %d. %B %Y").to_string(),
+                                        &member
+                                            .user
+                                            .created_at()
+                                            .format("%A, %d. %B %Y")
+                                            .to_string(),
                                         true,
                                     )
                                     .field("Join Date", &formatted_date, true)
