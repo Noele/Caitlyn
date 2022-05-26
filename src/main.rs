@@ -52,7 +52,7 @@ async fn after(_ctx: &Context, _msg: &Message, command_name: &str, command_resul
 
 #[group]
 #[only_in(guilds)]
-#[commands(ping)]
+#[commands(ping, userinfo)]
 struct General;
 
 #[group]

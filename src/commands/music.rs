@@ -24,11 +24,13 @@ use songbird::{
 use tokio::sync::RwLock;
 use std::sync::Arc;
 use regex::Regex;
+use serenity::model::id::GuildId;
 
 struct TrackEndNotifier {
     chan_id: ChannelId,
     http: Arc<Http>,
     data: Arc<RwLock<TypeMap>>,
+    guild_id: GuildId,
 }
 
 #[async_trait]
@@ -361,6 +363,8 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
 
         let send_http = ctx.http.clone();
 
+        let send_guild = msg.guild_id.unwrap().clone();
+
         let send_data = ctx.data.clone();
 
         let mut handle = handle_lock.lock().await;
@@ -371,6 +375,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
                 chan_id,
                 http: send_http,
                 data: send_data,
+                guild_id: send_guild
             },
         );
     } else {
